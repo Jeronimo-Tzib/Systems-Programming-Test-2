@@ -20,6 +20,13 @@ import (
 	"time"
 )
 
+const (
+
+	maxMessageLength = 1024 //max allowed message length
+	inactivTimeout = 30 * time.Second //set the inactivity timeout (30 seconds)
+
+)
+
 
 func worker(wg *sync.WaitGroup, tasks chan string, dialer net.Dialer) {
 	defer wg.Done()
