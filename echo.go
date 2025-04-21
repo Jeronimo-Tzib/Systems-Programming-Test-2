@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,20 +24,18 @@ import (
 const (
 
 	maxMessageLength = 1024 //max allowed message length
-	inactivTimeout = 30 * time.Second //set the inactivity timeout (30 seconds)
+	inactivityTimeout = 30 * time.Second //set the inactivity timeout (30 seconds)
 
 )
 
 //configuration struct to hold server settings
 type Config struct{
-
 Port int 
-logDir string
-
+LogDir string
 }
 
 //create a logging directory if it doesn't exist
-func ensLogDir(logDir string) error {
+func ensureLogDir(logDir string) error {
 	return os.MkdirAll(logDir, 0755)
 }
 
@@ -44,7 +43,7 @@ func ensLogDir(logDir string) error {
 func createClientLogFile(clientAddr string, logDir string)(*os.File, error){
 
 		//cleans the client address to make it suitable for a filename
-		safeAddr := string.Replace(strings.Replace(clientAddr, ":", "_", -1), ".", "-", -1)
+		safeAddr := strings.Replace(strings.Replace(clientAddr, ":", "_", -1), ".", "-", -1)
 	logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", safeAddr))
 return os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 }
@@ -80,7 +79,7 @@ func handleClient(conn net.Conn, wg *sync.WaitGroup, config Config) {
 	//set up a buffered reader
 	reader := bufio.NewReader(conn)
 
-	idleTimer := time.AfterFunc(inactivTimeout, func(){
+	idleTimer := time.AfterFunc(inactivityTimeout, func(){
 
 		logMessage(clientAddr, logFile, "Disconnected due to inactivity")
 		conn.Close()
@@ -91,10 +90,10 @@ func handleClient(conn net.Conn, wg *sync.WaitGroup, config Config) {
 
 	for {
 		//reset the timer on each iteration
-		idleTimer.Reset(inactivTimeout)
+		idleTimer.Reset(inactivityTimeout)
 
 		//set read deadline to handle potential blocking
-		conn.SetReadDeadline(time.Now().Add(inactivTimeout))
+		conn.SetReadDeadline(time.Now().Add(inactivityTimeout))
 
 		//read message from client (up to newline or max length)
 		message, err := reader.ReadString('\n')
@@ -103,21 +102,21 @@ func handleClient(conn net.Conn, wg *sync.WaitGroup, config Config) {
 			if err == io.EOF || strings.Contains(err.Error(), "use of closed network connection"){
 				logMessage(clientAddr, logFile, "Disconnected")
 			} else if netErr, ok := err.(net.Error); ok && netErr.Timeout(){
-				logMessage(clientAddr, logFIle, "Disconnected due to timeout")
+				logMessage(clientAddr, logFile, "Disconnected due to timeout")
 			}else {
 				logMessage(clientAddr, logFile, "Error reading: %v", err)
 			}
 			break
 			}
 
-			//time whitespace and newlines
+			//trim whitespace and newlines
 			message = strings.TrimSpace(message)
 
 			// check message length
 			if len(message) > maxMessageLength{
-				respone := fmt.Sprintf("Error: Message too long (max %d bytes)\n", maxMessageLength)
+				response := fmt.Sprintf("Error: Message too long (max %d bytes)\n", maxMessageLength)
 				conn.Write([]byte(response))
-				logMessage(clientAddr, logFile, "Mesage too long (%d bytes)", len(message))
+				logMessage(clientAddr, logFile, "Message too long (%d bytes)", len(message))
 				continue
 			}
 
@@ -129,13 +128,13 @@ func handleClient(conn net.Conn, wg *sync.WaitGroup, config Config) {
 
 			//check if we should close the connection
 			if response == "" {
-				break // empty response idicates connection should be closed
+				break // empty response indicates connection should be closed
 			}
 
 			//send response to client
 			_, err = conn.Write([]byte(response + "\n"))
 			if err != nil {
-				logMessage(clientAddr, logFile, "Error writing: %v, err")
+				logMessage(clientAddr, logFile, "Error writing: %v", err)
 				break
 				}
 			}
@@ -184,3 +183,49 @@ default:
 
 }
 
+func main(){
+	//parse command line flags
+	config := Config{}
+	flag.IntVar(&config.Port, "port", 4000, "Port to listen on")
+	flag.StringVar(&config.LogDir, "logdir", "logs", "Directory to store logs")
+	flag.Parse()
+
+	//ensure log directory exists
+	if err := ensureLogDir(config.LogDir); err != nil {
+		log.Fatalf("Failed to create log directory: %v", err)
+	}
+
+	//start server
+	address := fmt.Sprintf(":%d", config.Port)
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+
+	defer listener.Close()
+
+	log.Printf("Echo server started on port %d", config.Port)
+	log.Printf("Logs will be stored in %s", config.LogDir)
+
+	//declare wait group variable
+	var wg sync.WaitGroup
+
+	//accept connections in a loop
+	for{
+
+		conn, err := listener.Accept()
+		if err != nil{
+			log.Printf("error accepting connection: %v", err)
+			continue
+		}
+
+		//handle each client in a separate goroutine
+		wg.Add(1)
+		go handleClient(conn, &wg, config)
+
+	}
+	
+	//wait for all goroutines to complete(this won't execute in normal operation)
+	
+	wg.Wait()
+}
