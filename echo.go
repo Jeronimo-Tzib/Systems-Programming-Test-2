@@ -27,6 +27,18 @@ const (
 
 )
 
+//configuration struct to hold server settings
+type Config struct{
+
+Port int 
+logDir string
+
+}
+
+//create a logging directory if it doesn't exist
+func ensLogDir(logDir string) error {
+	return os.MkdirAll(logDir, 0755)
+}
 
 func worker(wg *sync.WaitGroup, tasks chan string, dialer net.Dialer) {
 	defer wg.Done()
