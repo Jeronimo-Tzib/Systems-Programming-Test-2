@@ -49,6 +49,8 @@ func createClientLogFile(clientAddr string, logDir string)(*os.File, error){
 return os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 }
 
+//log a message to both console and the client's log file
+
 func logMessage(clientAddr string, logFile *os.File, format string, args ...interface{}){
 	message := fmt.Sprintf(format,args...)
 	log.Printf("[%s]%s", clientAddr, message)
