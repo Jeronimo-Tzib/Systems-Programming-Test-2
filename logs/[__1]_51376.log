@@ -1,0 +1,5 @@
+[2025-04-21 06:41:48] Connected
+[2025-04-21 06:41:52] Received: /time
+[2025-04-21 06:42:03] Received: /echo This is an echo test
+[2025-04-21 06:42:07] Received: /quit
+[2025-04-21 06:42:07] Client requested to quit
