@@ -40,6 +40,24 @@ func ensLogDir(logDir string) error {
 	return os.MkdirAll(logDir, 0755)
 }
 
+//create a log file for a specific client
+func createClientLogFile(clientAddr string, logDir string)(*os.File, error){
+
+		//cleans the client address to make it suitable for a filename
+		safeAddr := string.Replace(strings.Replace(clientAddr, ":", "_", -1), ".", "-", -1)
+	logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", safeAddr))
+return os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+}
+
+func logMessage(clientAddr string, logFile *os.File, format string, args ...interface{}){
+	message := fmt.Sprintf(format,args...)
+	log.Printf("[%s]%s", clientAddr, message)
+	if logFile != nil {
+		timestamp := time.Now().Format("2006-01-02 15:04:05")
+		fmt.Fprintf(logFile, "[%s] %s\n", timestamp, message)
+	}
+}
+
 func worker(wg *sync.WaitGroup, tasks chan string, dialer net.Dialer) {
 	defer wg.Done()
 	maxRetries := 3
